@@ -348,16 +348,11 @@ def create_csr(private_key_pem, data):
     encoded = base64.b64encode(csr_der).decode('utf-8')
     return encoded
 
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Recover verification code ID and enter SMS code.")
-    parser.add_argument("file", type=str, help="The file to save or read the verification code ID.")
-    args = parser.parse_args()
-
+def setup(playbook_file):
     # Load the data from the file if it exists
     data = {}
-    if os.path.exists(args.file):
-        with open(args.file, 'r') as file:
+    if os.path.exists(playbook_file):
+        with open(playbook_file, 'r') as file:
             data = json.load(file)
 
     # Define the list of steps to run
@@ -371,7 +366,7 @@ if __name__ == "__main__":
         lambda: step_extract_enrollment_token_details(data),
         lambda: step_do_enroll(data),
         lambda: step_extract_certs_from_params(data),
-        #lambda: step_generate_login_cert(data),
+        # lambda: step_generate_login_cert(data),
         lambda: step_do_login(data),
     ]
 
@@ -380,3 +375,62 @@ if __name__ == "__main__":
         step()
         with open(args.file, 'w') as file:
             json.dump(data, file, indent=4)
+
+class APIClient:
+    def __init__(self, auth_token, base_url="https://api.accessy.se"):
+        self.session = requests.Session()
+        self.session.headers.update({
+            "authorization": f"Bearer {auth_token}"
+        })
+        self.base_url = base_url
+
+    def get(self, path, **kwargs):
+        return self.session.get(self.base_url + path, **kwargs)
+
+    def post(self, path, **kwargs):
+        return self.session.post(self.base_url + path, **kwargs)
+
+    # add .put, .delete if needed
+
+
+
+def list_assets(api_client):
+    url = "/asset/my-asset-publication?page_size=100"
+    response = api_client.get(url)
+    if response.status_code == 200:
+        print(json.dumps(response.json(), indent=2))
+    else:
+        print(f"Error: {response.status_code}, {response.text}")
+
+
+def validate_auth_token(api_client):
+    url = "/auth/action"
+    response = api_client.get(url)
+    if 200 <= response.status_code < 300:
+        print("Token is valid.")
+    else:
+        print(f"Token validation failed: {response.status_code}, {response.text}")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Accessy CLI")
+    parser.add_argument("command", choices=["login", "setup", "list-assets", "validate-auth-token"], help="Command to run")
+    parser.add_argument("file", type=str, help="The file to save or read the data")
+    args = parser.parse_args()
+
+    if args.command == "setup":
+        setup(args.file)
+    elif args.command == "login":
+        with open(args.file, 'r') as file:
+            data = json.load(file)
+        step_do_login(data)
+    elif args.command == "list-assets":
+        with open(args.file, 'r') as file:
+            data = json.load(file)
+        client = APIClient(data['authToken'])
+        list_assets(client)
+    elif args.command == "validate-auth-token":
+        with open(args.file, 'r') as file:
+            data = json.load(file)
+        client = APIClient(data['authToken'])
+        validate_auth_token(client)
