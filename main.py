@@ -191,7 +191,7 @@ def step_do_login(data):
     timestamp = str(int(rounded_time.timestamp()))
     base64_timestamp = base64.urlsafe_b64encode(timestamp.encode("utf-8")).decode("utf-8").rstrip("=")
 
-    body = f"YXhzLjEuNA.{base64_certs}.{base64_timestamp}"
+    body = f"YXhzLjEuNA.{base64_certs}.{base64_timestamp}"  # YXhzLjEuNA == axs.1.4
 
     # Sign the message
     signature = leaf_key.sign(
@@ -227,7 +227,7 @@ def step_do_enroll(data):
     encoded_csr_for_login = base64.urlsafe_b64encode(csr_for_login.encode('utf-8')).decode('utf-8').rstrip('=')
     encoded_csr_for_signing = base64.urlsafe_b64encode(csr_for_signing.encode('utf-8')).decode('utf-8').rstrip('=')
     payload = {
-        "csrForLogin": f"YXhzLjEuMA.{encoded_csr_for_login}",
+        "csrForLogin": f"YXhzLjEuMA.{encoded_csr_for_login}", # YXhzLjEuMA == "axs.1.0"
         "appName": "Accessy-iOS",
         "csrForSigning": f"YXhzLjEuMA.{encoded_csr_for_signing}",
         "deviceName": "iPhone (iPhone)",
@@ -250,7 +250,7 @@ def step_do_enroll(data):
         data['certificateForLoginParam'] = response_data['certificateForLogin']
         data['certificateForSigningParam'] = response_data['certificateForSigning']
     else:
-        print(f"Error: {response.status_code}, {response.text}")
+        raise RuntimeError(f"Error: {response.status_code}, {response.text}")
 
 
 def step_extract_certs_from_params(data):
@@ -319,6 +319,72 @@ def step_extract_certs_from_params(data):
     data['loginDecryptedCert0'] = certs[0]
     data['loginDecryptedCert1'] = certs[1]
 
+def step_extract_signing_certs_from_params(data):
+    # Step 1: Split the components of the certificateForLoginParam
+    components = data['certificateForSigningParam'].split(".")
+    """
+    for i, s in enumerate(components):
+        print(f"part {i}")
+        print(s)
+    """
+
+    # Step 1: Split the input message into parts
+    components = data['certificateForSigningParam'].split(".")
+
+    # Extract the key exchange public key from part 2
+    peer_public_key_encoded = base64.urlsafe_b64decode(fix_padding(components[2]))
+    peer_public_key = load_der_public_key(peer_public_key_encoded, backend=default_backend())
+
+    # Load the private key for login (this represents the entity's private key)
+    private_key_pem = data['privateKeyForSigning'].encode('utf-8')
+    private_key = load_pem_private_key(private_key_pem, password=None, backend=default_backend())
+
+    # Step 2: Perform ECDH key exchange to derive the shared secret
+    shared_secret = private_key.exchange(ec.ECDH(), peer_public_key)
+
+    # Step 3: Hash the shared secret using SHA-512 (as indicated in the Android Java implementation)
+    hashed_shared_secret = hashlib.sha512(shared_secret).digest()
+
+    # Step 4: Extract the encrypted message from components[3]
+    encrypted_message = base64.urlsafe_b64decode(fix_padding(components[3])).decode("utf-8")
+
+    # Step 5: Split the encrypted message into parts using '.' as a delimiter
+    encrypted_message_parts = encrypted_message.split('.')
+
+    if len(encrypted_message_parts) != 3:
+        print("Invalid number of components in the encrypted message.")
+        return
+
+    # Step 6: Extract components from the encrypted message
+    iv_encoded = encrypted_message_parts[0]
+    ciphertext_encoded = encrypted_message_parts[1]
+    tag_encoded = encrypted_message_parts[2]
+
+    # Decode the base64url encoded parts
+    iv = base64.urlsafe_b64decode(fix_padding(iv_encoded))
+    ciphertext = base64.urlsafe_b64decode(fix_padding(ciphertext_encoded))
+
+    # Step 7: Validate IV length
+    if len(iv) != 16:
+        print("Invalid IV length, must be 16 bytes.")
+        return
+
+    # Step 8: Decrypt the message using AES in CBC mode
+    # Create a cipher using AES CBC mode and the hashed shared secret as the key
+    cipher = AES_Crypto.new(hashed_shared_secret[:32], AES_Crypto.MODE_CBC,
+                            iv)  # Use only the first 32 bytes for AES-256
+    # Decrypt the ciphertext
+    decrypted_padded_message = cipher.decrypt(ciphertext)
+
+
+    decrypted_message = unpad(decrypted_padded_message, AES_Crypto.block_size)
+    # Convert decrypted bytes to a string and store it
+    decrypted_message_str = decrypted_message.decode('utf-8')
+    # Print or store the decrypted message
+    certs = decrypted_message_str.split(".")
+    data['signingDecryptedCert0'] = certs[0]
+    data['signingDecryptedCert1'] = certs[1]
+
 
 def fix_padding(s):
     while len(s) % 4 != 0:
@@ -367,6 +433,7 @@ def setup(playbook_file):
         lambda: step_do_enroll(data),
         lambda: step_extract_certs_from_params(data),
         # lambda: step_generate_login_cert(data),
+        lambda: step_extract_signing_certs_from_params(data),
         lambda: step_do_login(data),
     ]
 
@@ -375,6 +442,52 @@ def setup(playbook_file):
         step()
         with open(args.file, 'w') as file:
             json.dump(data, file, indent=4)
+
+
+def unlock(uuid, data):
+    leaf_key_pem = data["privateKeyForLogin"]
+    leaf_key = load_pem_private_key(leaf_key_pem.encode("utf-8"), password=None, backend=default_backend())
+
+    encoded_intermediate_cert = data['loginDecryptedCert1']
+    encoded_leaf_cert = data['loginDecryptedCert0']
+    base64_certs = base64.urlsafe_b64encode(f"{encoded_leaf_cert}.{encoded_intermediate_cert}".encode("utf-8")).decode(
+        "utf-8").rstrip("=")
+
+    # Round down to closest 5 seconds
+    now = datetime.datetime.now()
+    rounded_seconds = now.second - (now.second % 5)
+    rounded_time = now.replace(second=rounded_seconds, microsecond=0)
+    timestamp = str(int(rounded_time.timestamp()))
+    base64_timestamp = base64.urlsafe_b64encode(timestamp.encode("utf-8")).decode("utf-8").rstrip("=")
+
+    proof_header = f"YXhzLjEuNA.{base64_certs}.{base64_timestamp}"  # YXhzLjEuNA == axs.1.4
+
+    # Sign the message
+    signature = leaf_key.sign(
+        proof_header.encode("utf-8"),
+        ec.ECDSA(hashes.SHA256())
+    )
+
+    # Encode the signature in base64 format for easy transmission
+    signature_base64 = base64.urlsafe_b64encode(signature).decode("utf-8").rstrip("=")
+    proof_header = f"{proof_header}.{signature_base64}"
+
+    auth_token = data['authToken']
+    url = f"https://api.accessy.se/asset/asset-operation/{uuid}/invoke"
+    headers = {
+        "x-axs-proof": proof_header,
+        "content-type": "application/json",
+        "authorization": f"Bearer {auth_token}"
+    }
+
+    response = requests.put(url, headers=headers, json={})
+    if response.status_code == 200:
+        response_data = response.json()
+        print(response_data)
+    else:
+        print(response.headers)
+        print(f"Error: {response.status_code}, {response.text}")
+
 
 class APIClient:
     def __init__(self, auth_token, base_url="https://api.accessy.se"):
@@ -414,7 +527,7 @@ def validate_auth_token(api_client):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Accessy CLI")
-    parser.add_argument("command", choices=["login", "setup", "list-assets", "validate-auth-token"], help="Command to run")
+    parser.add_argument("command", choices=["login", "setup", "list-assets", "validate-auth-token", "unlock"], help="Command to run")
     parser.add_argument("file", type=str, help="The file to save or read the data")
     args = parser.parse_args()
 
@@ -434,3 +547,7 @@ if __name__ == "__main__":
             data = json.load(file)
         client = APIClient(data['authToken'])
         validate_auth_token(client)
+    elif args.command == "unlock":
+        with open(args.file, 'r') as file:
+            data = json.load(file)
+        unlock("458BCFE4-69F6-4499-8A88-6CB094141B36", data)
