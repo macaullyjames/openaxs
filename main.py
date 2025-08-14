@@ -86,18 +86,11 @@ def step_do_login(data):
     )
     body = enclave.encode_proof_message()
 
-    url = "https://api.accessy.se/auth/mobile-device/login"
-    headers = {
-        "x-axs-plan": "accessy",
-        "content-type": "application/json",
-    }
-
-    response = requests.post(url, headers=headers, data=body)
-    if response.status_code == 200:
-        response_data = response.json()
-        data['authToken'] = response_data['auth_token']
-    else:
-        print(f"Error: {response.status_code}, {response.text}")
+    client = APIClient()
+    response = client.post("/auth/mobile-device/login", data=body)
+    response.raise_for_status()
+    response_data = response.json()
+    data['authToken'] = response_data['auth_token']
 
 
 def step_do_enroll(data):
@@ -189,7 +182,7 @@ def unlock(uuid, data):
 
 
 class APIClient:
-    def __init__(self, auth_token, base_url="https://api.accessy.se"):
+    def __init__(self, auth_token=None, base_url="https://api.accessy.se"):
         self.session = requests.Session()
         self.session.headers.update({
             "authorization": f"Bearer {auth_token}"
