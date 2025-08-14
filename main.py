@@ -294,22 +294,11 @@ def setup(playbook_file):
 
 def unlock(uuid, data):
     proof_header = generate_proof(data)
-
-    auth_token = data['authToken']
-    url = f"https://api.accessy.se/asset/asset-operation/{uuid}/invoke"
-    headers = {
-        "x-axs-proof": proof_header,
-        "content-type": "application/json",
-        "authorization": f"Bearer {auth_token}"
-    }
-
-    response = requests.put(url, headers=headers, json={})
-    if response.status_code == 200:
-        response_data = response.json()
-        print(response_data)
-    else:
-        print(response.headers)
-        print(f"Error: {response.status_code}, {response.text}")
+    client = APIClient(data['authToken'])
+    headers = {"x-axs-proof": proof_header}
+    response = client.put(f"/asset/asset-operation/{uuid}/invoke", headers=headers, json={})
+    response.raise_for_status()
+    print(response.json())
 
 
 class APIClient:
@@ -325,6 +314,9 @@ class APIClient:
 
     def post(self, path, **kwargs):
         return self.session.post(self.base_url + path, **kwargs)
+
+    def put(self, path, **kwargs):
+        return self.session.put(self.base_url + path, **kwargs)
 
     # add .put, .delete if needed
 
