@@ -101,14 +101,12 @@ def step_do_enroll(data):
     enclave = Enclave()
     data['privateKeyPem'] = enclave.private_key_pem
 
-    csr_for_login = enclave.create_csr(data['enrollmentJti'], data['enrollmentDeviceId'])
-    csr_for_signing = enclave.create_csr(data['enrollmentJti'], data['enrollmentDeviceId'])
-    encoded_csr_for_login = base64.urlsafe_b64encode(csr_for_login.encode('utf-8')).decode('utf-8').rstrip('=')
-    encoded_csr_for_signing = base64.urlsafe_b64encode(csr_for_signing.encode('utf-8')).decode('utf-8').rstrip('=')
+    csr = enclave.create_csr(data['enrollmentJti'], data['enrollmentDeviceId'])
+    encoded_csr = base64.urlsafe_b64encode(csr.encode('utf-8')).decode('utf-8').rstrip('=')
     payload = {
-        "csrForLogin": f"YXhzLjEuMA.{encoded_csr_for_login}",  # YXhzLjEuMA == "axs.1.0"
+        "csrForLogin": f"YXhzLjEuMA.{encoded_csr}",  # YXhzLjEuMA == "axs.1.0"
         "appName": "Accessy-iOS",
-        "csrForSigning": f"YXhzLjEuMA.{encoded_csr_for_signing}",
+        "csrForSigning": f"YXhzLjEuMA.{encoded_csr}",
         "deviceName": "iPhone (iPhone)",
         "recoveryKey": data["recoveryKey"]
     }
