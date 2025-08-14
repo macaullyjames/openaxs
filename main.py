@@ -20,22 +20,6 @@ from Crypto.Util.Padding import pad, unpad
 import hashlib
 
 
-
-def step_generate_private_key(data):
-    # Check if this step should be run
-    if 'privateKey' in data:
-        print("privateKey is already set, skipping step")
-        return
-
-    private_key = ec.generate_private_key(ec.SECP256R1(), default_backend())
-    pem = private_key.private_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PrivateFormat.TraditionalOpenSSL,
-        encryption_algorithm=serialization.NoEncryption()
-    )
-    data['privateKey'] = pem.decode('utf-8')
-
-
 def step_input_phone_number(data):
     # Check if this step should be run
     if 'msisdn' in data:
@@ -119,9 +103,6 @@ def step_do_login(data):
     leaf_key_pem = data["privateKey"]
     leaf_key = load_pem_private_key(leaf_key_pem.encode("utf-8"), password=None, backend=default_backend())
 
-    # intermediate_key_pem = data["privateKey"]
-    # intermediate_key = load_pem_private_key(intermediate_key_pem.encode("utf-8"), password=None, backend=default_backend())
-
     encoded_intermediate_cert = data['loginDecryptedCert1']
     encoded_leaf_cert = data['loginDecryptedCert0']
     base64_certs = base64.urlsafe_b64encode(f"{encoded_leaf_cert}.{encoded_intermediate_cert}".encode("utf-8")).decode(
@@ -165,6 +146,15 @@ def step_do_enroll(data):
     if 'certificateForLoginParam' in data:
         print("certificateForLogin is already set, skipping do_enroll step.")
         return
+
+    private_key = ec.generate_private_key(ec.SECP256R1(), default_backend())
+    pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.TraditionalOpenSSL,
+        encryption_algorithm=serialization.NoEncryption()
+    )
+    data['privateKey'] = pem.decode('utf-8')
+
     csr_for_login = create_csr(data['privateKey'], data)
     csr_for_signing = create_csr(data['privateKey'], data)
     encoded_csr_for_login = base64.urlsafe_b64encode(csr_for_login.encode('utf-8')).decode('utf-8').rstrip('=')
@@ -366,7 +356,6 @@ def setup(playbook_file):
 
     # Define the list of steps to run
     steps = [
-        lambda: step_generate_private_key(data),
         lambda: step_input_phone_number(data),
         lambda: step_input_recovery_key(data),
         lambda: step_init_recovery(data),
