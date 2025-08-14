@@ -1,3 +1,4 @@
 .idea/
 venv/
-playbook
+__pycache__/
+playbook*
