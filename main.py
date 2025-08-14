@@ -6,46 +6,8 @@ import argparse
 import os
 import urllib3
 import jwt
-import datetime
-from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography import x509
-from cryptography.x509.oid import NameOID
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import serialization, hashes
-from cryptography.hazmat.primitives.serialization import load_pem_private_key, load_der_public_key
-from Crypto.Cipher import AES as AES_Crypto
-from Crypto.Util.Padding import unpad
-import hashlib
 
-
-def generate_proof(data):
-    private_key_pem = data["privateKeyPem"]
-    private_key = load_pem_private_key(private_key_pem.encode("utf-8"), password=None, backend=default_backend())
-
-    encoded_intermediate_cert = data['loginDecryptedCert1']
-    encoded_leaf_cert = data['loginDecryptedCert0']
-    base64_certs = base64.urlsafe_b64encode(f"{encoded_leaf_cert}.{encoded_intermediate_cert}".encode("utf-8")).decode(
-        "utf-8").rstrip("=")
-
-    # Round down to closest 5 seconds
-    now = datetime.datetime.now()
-    rounded_seconds = now.second - (now.second % 5)
-    rounded_time = now.replace(second=rounded_seconds, microsecond=0)
-    timestamp = str(int(rounded_time.timestamp()))
-    base64_timestamp = base64.urlsafe_b64encode(timestamp.encode("utf-8")).decode("utf-8").rstrip("=")
-
-    body = f"YXhzLjEuNA.{base64_certs}.{base64_timestamp}"  # YXhzLjEuNA == axs.1.4
-
-    # Sign the message
-    signature = private_key.sign(
-        body.encode("utf-8"),
-        ec.ECDSA(hashes.SHA256())
-    )
-
-    # Append the signature
-    signature_base64 = base64.urlsafe_b64encode(signature).decode("utf-8").rstrip("=")
-    msg = f"{body}.{signature_base64}"
-    return msg
+from enclave import Enclave
 
 
 def step_init_recovery(data):
@@ -117,7 +79,12 @@ def step_get_enrollment_token(data):
 
 
 def step_do_login(data):
-    body = generate_proof(data)
+    enclave = Enclave(
+        private_key_pem=data["privateKeyPem"],
+        login_leaf_cert=data["loginDecryptedCert0"],
+        login_intermediate_cert=data["loginDecryptedCert1"]
+    )
+    body = enclave.encode_proof_message()
 
     url = "https://api.accessy.se/auth/mobile-device/login"
     headers = {
@@ -138,16 +105,11 @@ def step_do_enroll(data):
         print("certificateForLogin is already set, skipping do_enroll step.")
         return
 
-    private_key = ec.generate_private_key(ec.SECP256R1(), default_backend())
-    pem = private_key.private_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PrivateFormat.TraditionalOpenSSL,
-        encryption_algorithm=serialization.NoEncryption()
-    )
-    data['privateKeyPem'] = pem.decode('utf-8')
+    enclave = Enclave()
+    data['privateKeyPem'] = enclave.private_key_pem
 
-    csr_for_login = create_csr(data['privateKeyPem'], data)
-    csr_for_signing = create_csr(data['privateKeyPem'], data)
+    csr_for_login = enclave.create_csr(data['enrollmentJti'], data['enrollmentDeviceId'])
+    csr_for_signing = enclave.create_csr(data['enrollmentJti'], data['enrollmentDeviceId'])
     encoded_csr_for_login = base64.urlsafe_b64encode(csr_for_login.encode('utf-8')).decode('utf-8').rstrip('=')
     encoded_csr_for_signing = base64.urlsafe_b64encode(csr_for_signing.encode('utf-8')).decode('utf-8').rstrip('=')
     payload = {
@@ -172,101 +134,21 @@ def step_do_enroll(data):
     if response.status_code == 200:
         response_data = response.json()
 
-        login_param = response_data['certificateForLogin']
-        login_certs = extract_certs_from_param(data['privateKeyPem'], login_param)
+        enclave = Enclave(
+            private_key_pem=data["privateKeyPem"],
+            login_leaf_cert=None,
+            login_intermediate_cert=None
+        )
+
+        login_cert_message = response_data['certificateForLogin']
+        login_certs = enclave.decode_certificate_message(login_cert_message)
         data['loginDecryptedCert0'], data['loginDecryptedCert1'] = login_certs[0], login_certs[1]
 
-        signing_param = response_data['certificateForSigning']
-        signing_certs = extract_certs_from_param(data['privateKeyPem'], signing_param)
+        signing_cert_message = response_data['certificateForSigning']
+        signing_certs = enclave.decode_certificate_message(signing_cert_message)
         data['signingDecryptedCert0'], data['signingDecryptedCert1'] = signing_certs[0], signing_certs[1]
     else:
         raise RuntimeError(f"Error: {response.status_code}, {response.text}")
-
-
-def extract_certs_from_param(private_key_bytes, param):
-    # Step 1: Split the input message into parts
-    components = param.split(".")
-
-    # Extract the key exchange public key from part 2
-    peer_public_key_encoded = base64.urlsafe_b64decode(fix_padding(components[2]))
-    peer_public_key = load_der_public_key(peer_public_key_encoded, backend=default_backend())
-
-    # Load the private key for login (this represents the entity's private key)
-    private_key_pem = private_key_bytes.encode('utf-8')
-    private_key = load_pem_private_key(private_key_pem, password=None, backend=default_backend())
-
-    # Step 2: Perform ECDH key exchange to derive the shared secret
-    shared_secret = private_key.exchange(ec.ECDH(), peer_public_key)
-
-    # Step 3: Hash the shared secret using SHA-512 (as indicated in the Android Java implementation)
-    hashed_shared_secret = hashlib.sha512(shared_secret).digest()
-
-    # Step 4: Extract the encrypted message from components[3]
-    encrypted_message = base64.urlsafe_b64decode(fix_padding(components[3])).decode("utf-8")
-
-    # Step 5: Split the encrypted message into parts using '.' as a delimiter
-    encrypted_message_parts = encrypted_message.split('.')
-
-    if len(encrypted_message_parts) != 3:
-        print("Invalid number of components in the encrypted message.")
-        return
-
-    # Step 6: Extract components from the encrypted message
-    iv_encoded = encrypted_message_parts[0]
-    ciphertext_encoded = encrypted_message_parts[1]
-
-    # Decode the base64url encoded parts
-    iv = base64.urlsafe_b64decode(fix_padding(iv_encoded))
-    ciphertext = base64.urlsafe_b64decode(fix_padding(ciphertext_encoded))
-
-    # Step 7: Validate IV length
-    if len(iv) != 16:
-        print("Invalid IV length, must be 16 bytes.")
-        return
-
-    # Step 8: Decrypt the message using AES in CBC mode
-    # Create a cipher using AES CBC mode and the hashed shared secret as the key
-    cipher = AES_Crypto.new(hashed_shared_secret[:32], AES_Crypto.MODE_CBC,
-                            iv)  # Use only the first 32 bytes for AES-256
-    # Decrypt the ciphertext
-    decrypted_padded_message = cipher.decrypt(ciphertext)
-
-    decrypted_message = unpad(decrypted_padded_message, AES_Crypto.block_size)
-    # Convert decrypted bytes to a string and store it
-    decrypted_message_str = decrypted_message.decode('utf-8')
-    # Print or store the decrypted message
-    certs = decrypted_message_str.split(".")
-    return certs
-
-
-def fix_padding(s):
-    while len(s) % 4 != 0:
-        s += "="
-    return s
-
-
-def create_csr(private_key_pem, data):
-    # Load the private key from PEM
-    private_key = serialization.load_pem_private_key(
-        private_key_pem.encode('utf-8'),
-        password=None,
-        backend=default_backend()
-    )
-
-    # Create subject information
-    subject = x509.Name([
-        x509.NameAttribute(NameOID.ORGANIZATION_NAME, data['enrollmentJti']),
-        x509.NameAttribute(NameOID.COMMON_NAME, data['enrollmentDeviceId']),
-    ])
-
-    # Create the CSR
-    csr = x509.CertificateSigningRequestBuilder().subject_name(subject).sign(
-        private_key, hashes.SHA256(), default_backend()
-    )
-
-    csr_der = csr.public_bytes(serialization.Encoding.DER)
-    encoded = base64.b64encode(csr_der).decode('utf-8')
-    return encoded
 
 
 def setup(playbook_file):
@@ -293,7 +175,12 @@ def setup(playbook_file):
 
 
 def unlock(uuid, data):
-    proof_header = generate_proof(data)
+    enclave = Enclave(
+        private_key_pem=data["privateKeyPem"],
+        login_leaf_cert=data["loginDecryptedCert0"],
+        login_intermediate_cert=data["loginDecryptedCert1"]
+    )
+    proof_header = enclave.encode_proof_message()
     client = APIClient(data['authToken'])
     headers = {"x-axs-proof": proof_header}
     response = client.put(f"/asset/asset-operation/{uuid}/invoke", headers=headers, json={})
