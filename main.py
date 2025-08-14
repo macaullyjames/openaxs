@@ -22,21 +22,15 @@ def step_init_recovery(data):
         recovery_key = input("Please enter the recovery key: ")
         data['recoveryKey'] = recovery_key
 
-    url = "https://api.accessy.se/auth/recover"
-    headers = {
-        "x-axs-plan": "accessy",
-        "content-type": "application/json"
-    }
+    client = APIClient()
     payload = {
         "msisdn": data['msisdn']
     }
 
-    response = requests.post(url, headers=headers, json=payload)
-    if response.status_code == 200:
-        response_data = response.json()
-        data.update(response_data)
-    else:
-        print(f"Error: {response.status_code}, {response.text}")
+    response = client.post("/auth/recover", json=payload)
+    response.raise_for_status()
+    response_data = response.json()
+    data["verificationCodeId"] = response_data["verificationCodeId"]
 
 
 def step_input_sms_code(data):
