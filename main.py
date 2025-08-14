@@ -125,53 +125,6 @@ def step_extract_enrollment_token_details(data):
     data['enrollmentDeviceId'] = decoded['deviceId']
 
 
-def step_generate_login_cert(data):
-    # Decode the intermediate certificate and load it
-    intermediate_cert_der = base64.b64decode(data['certificateForLogin'])
-    intermediate_cert = x509.load_der_x509_certificate(intermediate_cert_der, default_backend())
-
-    # Load the intermediate private key
-    private_key_pem = data['privateKeyForLogin'].encode()
-    private_key = load_pem_private_key(private_key_pem, password=None, backend=default_backend())
-
-    # Generate a new EC key pair for the leaf certificate
-    leaf_key = ec.generate_private_key(ec.SECP256R1(), default_backend())
-
-    # Create a subject name for the leaf certificate
-    subject = x509.Name([
-        x509.NameAttribute(NameOID.ORGANIZATION_NAME, data['enrollmentJti']),
-        x509.NameAttribute(NameOID.COMMON_NAME, data['enrollmentDeviceId'])
-    ])
-
-    # Use the issuer's name from the intermediate certificate
-    issuer = intermediate_cert.subject
-
-    # Build the leaf certificate
-    leaf_cert = (
-        x509.CertificateBuilder()
-        .subject_name(subject)
-        .issuer_name(issuer)
-        .public_key(leaf_key.public_key())
-        .serial_number(0x6d42d847)
-        .not_valid_before(datetime.datetime(2024, 10, 14, 17, 30, 38))  # Match the Not Before date
-        .not_valid_after(datetime.datetime(2025, 10, 14, 17, 30, 38))  # Match the Not After date
-        .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
-        .sign(private_key, hashes.SHA256(), default_backend())
-    )
-
-    # Convert the leaf certificate to PEM format
-    leaf_cert_der = leaf_cert.public_bytes(Encoding.DER)
-    leaf_cert_der_encoded = base64.b64encode(leaf_cert_der).decode('utf-8')
-    leaf_key_pem = leaf_key.private_bytes(
-        Encoding.PEM,
-        PrivateFormat.TraditionalOpenSSL,
-        NoEncryption()
-    )
-
-    data["loginLeafCert"] = leaf_cert_der_encoded
-    data["loginPrivateKey"] = leaf_key_pem.decode("utf-8")
-
-
 def step_do_login(data):
     leaf_key_pem = data["privateKeyForLogin"]
     leaf_key = load_pem_private_key(leaf_key_pem.encode("utf-8"), password=None, backend=default_backend())
@@ -432,7 +385,6 @@ def setup(playbook_file):
         lambda: step_extract_enrollment_token_details(data),
         lambda: step_do_enroll(data),
         lambda: step_extract_certs_from_params(data),
-        # lambda: step_generate_login_cert(data),
         lambda: step_extract_signing_certs_from_params(data),
         lambda: step_do_login(data),
     ]
