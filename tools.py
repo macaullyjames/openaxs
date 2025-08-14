@@ -8,7 +8,9 @@ from cryptography.hazmat.backends import default_backend
 
 import warnings
 from cryptography.utils import CryptographyDeprecationWarning
+
 warnings.filterwarnings("ignore", category=CryptographyDeprecationWarning)
+
 
 def fix_padding(s):
     while len(s) % 4 != 0:
@@ -89,6 +91,7 @@ def sign(message):
     print(pem)
     return signature
 
+
 def main():
     cmd = sys.argv[1] if len(sys.argv) > 1 else None
     data = sys.stdin.read()
@@ -113,6 +116,7 @@ def main():
     else:
         print("Usage: python tools.py decode_csrForLogin")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

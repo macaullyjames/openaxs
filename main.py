@@ -27,6 +27,7 @@ def step_input_phone_number(data):
     msisdn = input("Please enter your phone number: ")
     data['msisdn'] = msisdn
 
+
 def step_input_recovery_key(data):
     # Check if this step should be run
     if 'recoveryKey' in data:
@@ -57,6 +58,7 @@ def step_init_recovery(data):
     else:
         print(f"Error: {response.status_code}, {response.text}")
 
+
 def step_input_sms_code(data):
     # Check if this step should be run
     if 'verificationCode' in data:
@@ -66,6 +68,7 @@ def step_input_sms_code(data):
     # Ask the user for the SMS code
     verification_code = input("Please enter the SMS code you received: ")
     data['verificationCode'] = verification_code
+
 
 def step_get_enrollment_token(data):
     # Check if this step should be run
@@ -136,6 +139,7 @@ def step_do_login(data):
     else:
         print(f"Error: {response.status_code}, {response.text}")
 
+
 def step_do_enroll(data):
     if 'certificateForLoginParam' in data:
         print("certificateForLogin is already set, skipping do_enroll step.")
@@ -154,7 +158,7 @@ def step_do_enroll(data):
     encoded_csr_for_login = base64.urlsafe_b64encode(csr_for_login.encode('utf-8')).decode('utf-8').rstrip('=')
     encoded_csr_for_signing = base64.urlsafe_b64encode(csr_for_signing.encode('utf-8')).decode('utf-8').rstrip('=')
     payload = {
-        "csrForLogin": f"YXhzLjEuMA.{encoded_csr_for_login}", # YXhzLjEuMA == "axs.1.0"
+        "csrForLogin": f"YXhzLjEuMA.{encoded_csr_for_login}",  # YXhzLjEuMA == "axs.1.0"
         "appName": "Accessy-iOS",
         "csrForSigning": f"YXhzLjEuMA.{encoded_csr_for_signing}",
         "deviceName": "iPhone (iPhone)",
@@ -247,6 +251,7 @@ def fix_padding(s):
         s += "="
     return s
 
+
 def create_csr(private_key_pem, data):
     # Load the private key from PEM
     private_key = serialization.load_pem_private_key(
@@ -269,6 +274,7 @@ def create_csr(private_key_pem, data):
     csr_der = csr.public_bytes(serialization.Encoding.DER)
     encoded = base64.b64encode(csr_der).decode('utf-8')
     return encoded
+
 
 def setup(playbook_file):
     # Load the data from the file if it exists
@@ -357,7 +363,6 @@ class APIClient:
     # add .put, .delete if needed
 
 
-
 def list_assets(api_client):
     url = "/asset/my-asset-publication?page_size=100"
     response = api_client.get(url)
@@ -378,7 +383,8 @@ def validate_auth_token(api_client):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Accessy CLI")
-    parser.add_argument("command", choices=["setup", "list-assets", "validate-auth-token", "unlock"], help="Command to run")
+    parser.add_argument("command", choices=["setup", "list-assets", "validate-auth-token", "unlock"],
+                        help="Command to run")
     parser.add_argument("file", type=str, help="The file to save or read the data")
     args = parser.parse_args()
 
