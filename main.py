@@ -124,7 +124,6 @@ def step_do_login(data):
     # Encode the signature in base64 format for easy transmission
     signature_base64 = base64.urlsafe_b64encode(signature).decode("utf-8").rstrip("=")
     body = f"{body}.{signature_base64}"
-    print(body)
 
     url = "https://api.accessy.se/auth/mobile-device/login"
     headers = {
@@ -135,7 +134,6 @@ def step_do_login(data):
     response = requests.post(url, headers=headers, data=body)
     if response.status_code == 200:
         response_data = response.json()
-        print(response_data)
         data['authToken'] = response_data['auth_token']
     else:
         print(f"Error: {response.status_code}, {response.text}")
