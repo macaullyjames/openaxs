@@ -436,16 +436,12 @@ def validate_auth_token(api_client):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Accessy CLI")
-    parser.add_argument("command", choices=["login", "setup", "list-assets", "validate-auth-token", "unlock"], help="Command to run")
+    parser.add_argument("command", choices=["setup", "list-assets", "validate-auth-token", "unlock"], help="Command to run")
     parser.add_argument("file", type=str, help="The file to save or read the data")
     args = parser.parse_args()
 
     if args.command == "setup":
         setup(args.file)
-    elif args.command == "login":
-        with open(args.file, 'r') as file:
-            data = json.load(file)
-        step_do_login(data)
     elif args.command == "list-assets":
         with open(args.file, 'r') as file:
             data = json.load(file)
