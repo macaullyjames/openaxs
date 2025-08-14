@@ -18,6 +18,36 @@ from Crypto.Util.Padding import unpad
 import hashlib
 
 
+def generate_proof(data):
+    private_key_pem = data["privateKeyPem"]
+    private_key = load_pem_private_key(private_key_pem.encode("utf-8"), password=None, backend=default_backend())
+
+    encoded_intermediate_cert = data['loginDecryptedCert1']
+    encoded_leaf_cert = data['loginDecryptedCert0']
+    base64_certs = base64.urlsafe_b64encode(f"{encoded_leaf_cert}.{encoded_intermediate_cert}".encode("utf-8")).decode(
+        "utf-8").rstrip("=")
+
+    # Round down to closest 5 seconds
+    now = datetime.datetime.now()
+    rounded_seconds = now.second - (now.second % 5)
+    rounded_time = now.replace(second=rounded_seconds, microsecond=0)
+    timestamp = str(int(rounded_time.timestamp()))
+    base64_timestamp = base64.urlsafe_b64encode(timestamp.encode("utf-8")).decode("utf-8").rstrip("=")
+
+    body = f"YXhzLjEuNA.{base64_certs}.{base64_timestamp}"  # YXhzLjEuNA == axs.1.4
+
+    # Sign the message
+    signature = private_key.sign(
+        body.encode("utf-8"),
+        ec.ECDSA(hashes.SHA256())
+    )
+
+    # Append the signature
+    signature_base64 = base64.urlsafe_b64encode(signature).decode("utf-8").rstrip("=")
+    msg = f"{body}.{signature_base64}"
+    return msg
+
+
 def step_init_recovery(data):
     if 'verificationCodeId' in data:
         return
@@ -87,32 +117,7 @@ def step_get_enrollment_token(data):
 
 
 def step_do_login(data):
-    leaf_key_pem = data["privateKeyPem"]
-    leaf_key = load_pem_private_key(leaf_key_pem.encode("utf-8"), password=None, backend=default_backend())
-
-    encoded_intermediate_cert = data['loginDecryptedCert1']
-    encoded_leaf_cert = data['loginDecryptedCert0']
-    base64_certs = base64.urlsafe_b64encode(f"{encoded_leaf_cert}.{encoded_intermediate_cert}".encode("utf-8")).decode(
-        "utf-8").rstrip("=")
-
-    # Round down to closest 5 seconds
-    now = datetime.datetime.now()
-    rounded_seconds = now.second - (now.second % 5)
-    rounded_time = now.replace(second=rounded_seconds, microsecond=0)
-    timestamp = str(int(rounded_time.timestamp()))
-    base64_timestamp = base64.urlsafe_b64encode(timestamp.encode("utf-8")).decode("utf-8").rstrip("=")
-
-    body = f"YXhzLjEuNA.{base64_certs}.{base64_timestamp}"  # YXhzLjEuNA == axs.1.4
-
-    # Sign the message
-    signature = leaf_key.sign(
-        body.encode("utf-8"),
-        ec.ECDSA(hashes.SHA256())
-    )
-
-    # Encode the signature in base64 format for easy transmission
-    signature_base64 = base64.urlsafe_b64encode(signature).decode("utf-8").rstrip("=")
-    body = f"{body}.{signature_base64}"
+    body = generate_proof(data)
 
     url = "https://api.accessy.se/auth/mobile-device/login"
     headers = {
@@ -288,32 +293,7 @@ def setup(playbook_file):
 
 
 def unlock(uuid, data):
-    leaf_key_pem = data["privateKeyPem"]
-    leaf_key = load_pem_private_key(leaf_key_pem.encode("utf-8"), password=None, backend=default_backend())
-
-    encoded_intermediate_cert = data['loginDecryptedCert1']
-    encoded_leaf_cert = data['loginDecryptedCert0']
-    base64_certs = base64.urlsafe_b64encode(f"{encoded_leaf_cert}.{encoded_intermediate_cert}".encode("utf-8")).decode(
-        "utf-8").rstrip("=")
-
-    # Round down to closest 5 seconds
-    now = datetime.datetime.now()
-    rounded_seconds = now.second - (now.second % 5)
-    rounded_time = now.replace(second=rounded_seconds, microsecond=0)
-    timestamp = str(int(rounded_time.timestamp()))
-    base64_timestamp = base64.urlsafe_b64encode(timestamp.encode("utf-8")).decode("utf-8").rstrip("=")
-
-    proof_header = f"YXhzLjEuNA.{base64_certs}.{base64_timestamp}"  # YXhzLjEuNA == axs.1.4
-
-    # Sign the message
-    signature = leaf_key.sign(
-        proof_header.encode("utf-8"),
-        ec.ECDSA(hashes.SHA256())
-    )
-
-    # Encode the signature in base64 format for easy transmission
-    signature_base64 = base64.urlsafe_b64encode(signature).decode("utf-8").rstrip("=")
-    proof_header = f"{proof_header}.{signature_base64}"
+    proof_header = generate_proof(data)
 
     auth_token = data['authToken']
     url = f"https://api.accessy.se/asset/asset-operation/{uuid}/invoke"
