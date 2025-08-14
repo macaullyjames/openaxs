@@ -86,15 +86,13 @@ def step_get_enrollment_token(data):
     response = requests.post(url, headers=headers, json=payload)
     if response.status_code == 200:
         response_data = response.json()
-        data['enrollmentToken'] = response_data['token']
+        token = response_data['token']
+        decoded = jwt.decode(token, options={"verify_signature": False})
+        data['enrollmentToken'] = token
+        data['enrollmentJti'] = decoded['jti']
+        data['enrollmentDeviceId'] = decoded['deviceId']
     else:
         print(f"Error: {response.status_code}, {response.text}")
-
-
-def step_extract_enrollment_token_details(data):
-    decoded = jwt.decode(data['enrollmentToken'], options={"verify_signature": False})
-    data['enrollmentJti'] = decoded['jti']
-    data['enrollmentDeviceId'] = decoded['deviceId']
 
 
 def step_do_login(data):
@@ -286,7 +284,6 @@ def setup(playbook_file):
         lambda: step_init_recovery(data),
         lambda: step_input_sms_code(data),
         lambda: step_get_enrollment_token(data),
-        lambda: step_extract_enrollment_token_details(data),
         lambda: step_do_enroll(data),
         lambda: step_do_login(data),
     ]
