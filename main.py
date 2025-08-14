@@ -18,7 +18,7 @@ from Crypto.Util.Padding import unpad
 import hashlib
 
 
-def step_input_phone_number(data):
+def step_input_account_details(data):
     # Check if this step should be run
     if 'msisdn' in data:
         print("msisdn is already set, skipping step")
@@ -26,13 +26,6 @@ def step_input_phone_number(data):
 
     msisdn = input("Please enter your phone number: ")
     data['msisdn'] = msisdn
-
-
-def step_input_recovery_key(data):
-    # Check if this step should be run
-    if 'recoveryKey' in data:
-        print("recoveryKey is already set, skipping step")
-        return
 
     recovery_key = input("Please enter the recovery key: ")
     data['recoveryKey'] = recovery_key
@@ -285,8 +278,7 @@ def setup(playbook_file):
 
     # Define the list of steps to run
     steps = [
-        lambda: step_input_phone_number(data),
-        lambda: step_input_recovery_key(data),
+        lambda: step_input_account_details(data),
         lambda: step_init_recovery(data),
         lambda: step_input_sms_code(data),
         lambda: step_get_enrollment_token(data),
