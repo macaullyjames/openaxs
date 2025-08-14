@@ -176,8 +176,14 @@ def step_do_enroll(data):
     response = requests.post(url, headers=headers, data=payload)
     if response.status_code == 200:
         response_data = response.json()
-        data['certificateForLoginParam'] = response_data['certificateForLogin']
-        data['certificateForSigningParam'] = response_data['certificateForSigning']
+
+        login_param = response_data['certificateForLogin']
+        login_certs = extract_certs_from_param(data['privateKey'], login_param)
+        data['loginDecryptedCert0'], data['loginDecryptedCert1'] = login_certs[0], login_certs[1]
+
+        signing_param = response_data['certificateForSigning']
+        signing_certs = extract_certs_from_param(data['privateKey'], signing_param)
+        data['signingDecryptedCert0'], data['signingDecryptedCert1'] = signing_certs[0], signing_certs[1]
     else:
         raise RuntimeError(f"Error: {response.status_code}, {response.text}")
 
@@ -235,17 +241,7 @@ def extract_certs_from_param(private_key_bytes, param):
     decrypted_message_str = decrypted_message.decode('utf-8')
     # Print or store the decrypted message
     certs = decrypted_message_str.split(".")
-    return certs[0], certs[1]
-
-
-def step_extract_login_certs_from_params(data):
-    param = data['certificateForLoginParam']
-    data['loginDecryptedCert0'], data['loginDecryptedCert1'] = extract_certs_from_param(data['privateKey'], param)
-
-
-def step_extract_signing_certs_from_params(data):
-    param = data['certificateForSigningParam']
-    data['signingDecryptedCert0'], data['signingDecryptedCert1'] = extract_certs_from_param(data['privateKey'], param)
+    return certs
 
 
 def fix_padding(s):
@@ -292,8 +288,6 @@ def setup(playbook_file):
         lambda: step_get_enrollment_token(data),
         lambda: step_extract_enrollment_token_details(data),
         lambda: step_do_enroll(data),
-        lambda: step_extract_login_certs_from_params(data),
-        lambda: step_extract_signing_certs_from_params(data),
         lambda: step_do_login(data),
     ]
 
