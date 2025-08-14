@@ -182,16 +182,16 @@ def step_do_enroll(data):
         raise RuntimeError(f"Error: {response.status_code}, {response.text}")
 
 
-def step_extract_certs_from_params(data):
+def extract_certs_from_param(private_key_bytes, param):
     # Step 1: Split the input message into parts
-    components = data['certificateForLoginParam'].split(".")
+    components = param.split(".")
 
     # Extract the key exchange public key from part 2
     peer_public_key_encoded = base64.urlsafe_b64decode(fix_padding(components[2]))
     peer_public_key = load_der_public_key(peer_public_key_encoded, backend=default_backend())
 
     # Load the private key for login (this represents the entity's private key)
-    private_key_pem = data['privateKey'].encode('utf-8')
+    private_key_pem = private_key_bytes.encode('utf-8')
     private_key = load_pem_private_key(private_key_pem, password=None, backend=default_backend())
 
     # Step 2: Perform ECDH key exchange to derive the shared secret
@@ -230,71 +230,22 @@ def step_extract_certs_from_params(data):
     # Decrypt the ciphertext
     decrypted_padded_message = cipher.decrypt(ciphertext)
 
-
     decrypted_message = unpad(decrypted_padded_message, AES_Crypto.block_size)
     # Convert decrypted bytes to a string and store it
     decrypted_message_str = decrypted_message.decode('utf-8')
     # Print or store the decrypted message
     certs = decrypted_message_str.split(".")
-    data['loginDecryptedCert0'] = certs[0]
-    data['loginDecryptedCert1'] = certs[1]
+    return certs[0], certs[1]
+
+
+def step_extract_login_certs_from_params(data):
+    param = data['certificateForLoginParam']
+    data['loginDecryptedCert0'], data['loginDecryptedCert1'] = extract_certs_from_param(data['privateKey'], param)
+
 
 def step_extract_signing_certs_from_params(data):
-    # Step 1: Split the input message into parts
-    components = data['certificateForSigningParam'].split(".")
-
-    # Extract the key exchange public key from part 2
-    peer_public_key_encoded = base64.urlsafe_b64decode(fix_padding(components[2]))
-    peer_public_key = load_der_public_key(peer_public_key_encoded, backend=default_backend())
-
-    # Load the private key for login (this represents the entity's private key)
-    private_key_pem = data['privateKey'].encode('utf-8')
-    private_key = load_pem_private_key(private_key_pem, password=None, backend=default_backend())
-
-    # Step 2: Perform ECDH key exchange to derive the shared secret
-    shared_secret = private_key.exchange(ec.ECDH(), peer_public_key)
-
-    # Step 3: Hash the shared secret using SHA-512 (as indicated in the Android Java implementation)
-    hashed_shared_secret = hashlib.sha512(shared_secret).digest()
-
-    # Step 4: Extract the encrypted message from components[3]
-    encrypted_message = base64.urlsafe_b64decode(fix_padding(components[3])).decode("utf-8")
-
-    # Step 5: Split the encrypted message into parts using '.' as a delimiter
-    encrypted_message_parts = encrypted_message.split('.')
-
-    if len(encrypted_message_parts) != 3:
-        print("Invalid number of components in the encrypted message.")
-        return
-
-    # Step 6: Extract components from the encrypted message
-    iv_encoded = encrypted_message_parts[0]
-    ciphertext_encoded = encrypted_message_parts[1]
-
-    # Decode the base64url encoded parts
-    iv = base64.urlsafe_b64decode(fix_padding(iv_encoded))
-    ciphertext = base64.urlsafe_b64decode(fix_padding(ciphertext_encoded))
-
-    # Step 7: Validate IV length
-    if len(iv) != 16:
-        print("Invalid IV length, must be 16 bytes.")
-        return
-
-    # Step 8: Decrypt the message using AES in CBC mode
-    # Create a cipher using AES CBC mode and the hashed shared secret as the key
-    cipher = AES_Crypto.new(hashed_shared_secret[:32], AES_Crypto.MODE_CBC,
-                            iv)  # Use only the first 32 bytes for AES-256
-    # Decrypt the ciphertext
-    decrypted_padded_message = cipher.decrypt(ciphertext)
-
-
-    decrypted_message = unpad(decrypted_padded_message, AES_Crypto.block_size)
-    # Convert decrypted bytes to a string and store it
-    decrypted_message_str = decrypted_message.decode('utf-8')
-    # Print or store the decrypted message
-    certs = decrypted_message_str.split(".")
-    data['signingDecryptedCert0'] = certs[0]
-    data['signingDecryptedCert1'] = certs[1]
+    param = data['certificateForSigningParam']
+    data['signingDecryptedCert0'], data['signingDecryptedCert1'] = extract_certs_from_param(data['privateKey'], param)
 
 
 def fix_padding(s):
@@ -341,7 +292,7 @@ def setup(playbook_file):
         lambda: step_get_enrollment_token(data),
         lambda: step_extract_enrollment_token_details(data),
         lambda: step_do_enroll(data),
-        lambda: step_extract_certs_from_params(data),
+        lambda: step_extract_login_certs_from_params(data),
         lambda: step_extract_signing_certs_from_params(data),
         lambda: step_do_login(data),
     ]
