@@ -106,9 +106,7 @@ def main():
         else:
             for cert in certs:
                 continue
-                #print(cert)
 
-        #print(pem)
     elif cmd == "sign":
         sig = sign(data)
         print(base64.b64encode(sig).decode('utf-8'))

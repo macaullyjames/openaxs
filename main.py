@@ -12,11 +12,9 @@ from cryptography import x509
 from cryptography.x509.oid import NameOID
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization, hashes
-from cryptography.hazmat.primitives.serialization import load_pem_private_key, load_der_public_key, Encoding, PrivateFormat, NoEncryption
-from cryptography.hazmat.primitives.kdf.hkdf import HKDF
-from cryptography.hazmat.primitives.ciphers.algorithms import AES
+from cryptography.hazmat.primitives.serialization import load_pem_private_key, load_der_public_key
 from Crypto.Cipher import AES as AES_Crypto
-from Crypto.Util.Padding import pad, unpad
+from Crypto.Util.Padding import unpad
 import hashlib
 
 
@@ -187,14 +185,6 @@ def step_do_enroll(data):
 
 
 def step_extract_certs_from_params(data):
-    # Step 1: Split the components of the certificateForLoginParam
-    components = data['certificateForLoginParam'].split(".")
-    """
-    for i, s in enumerate(components):
-        print(f"part {i}")
-        print(s)
-    """
-
     # Step 1: Split the input message into parts
     components = data['certificateForLoginParam'].split(".")
 
@@ -225,7 +215,6 @@ def step_extract_certs_from_params(data):
     # Step 6: Extract components from the encrypted message
     iv_encoded = encrypted_message_parts[0]
     ciphertext_encoded = encrypted_message_parts[1]
-    tag_encoded = encrypted_message_parts[2]
 
     # Decode the base64url encoded parts
     iv = base64.urlsafe_b64decode(fix_padding(iv_encoded))
@@ -253,14 +242,6 @@ def step_extract_certs_from_params(data):
     data['loginDecryptedCert1'] = certs[1]
 
 def step_extract_signing_certs_from_params(data):
-    # Step 1: Split the components of the certificateForLoginParam
-    components = data['certificateForSigningParam'].split(".")
-    """
-    for i, s in enumerate(components):
-        print(f"part {i}")
-        print(s)
-    """
-
     # Step 1: Split the input message into parts
     components = data['certificateForSigningParam'].split(".")
 
@@ -291,7 +272,6 @@ def step_extract_signing_certs_from_params(data):
     # Step 6: Extract components from the encrypted message
     iv_encoded = encrypted_message_parts[0]
     ciphertext_encoded = encrypted_message_parts[1]
-    tag_encoded = encrypted_message_parts[2]
 
     # Decode the base64url encoded parts
     iv = base64.urlsafe_b64decode(fix_padding(iv_encoded))
