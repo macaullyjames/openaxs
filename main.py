@@ -87,7 +87,7 @@ def step_get_enrollment_token(data):
 
 
 def step_do_login(data):
-    leaf_key_pem = data["privateKey"]
+    leaf_key_pem = data["privateKeyPem"]
     leaf_key = load_pem_private_key(leaf_key_pem.encode("utf-8"), password=None, backend=default_backend())
 
     encoded_intermediate_cert = data['loginDecryptedCert1']
@@ -139,10 +139,10 @@ def step_do_enroll(data):
         format=serialization.PrivateFormat.TraditionalOpenSSL,
         encryption_algorithm=serialization.NoEncryption()
     )
-    data['privateKey'] = pem.decode('utf-8')
+    data['privateKeyPem'] = pem.decode('utf-8')
 
-    csr_for_login = create_csr(data['privateKey'], data)
-    csr_for_signing = create_csr(data['privateKey'], data)
+    csr_for_login = create_csr(data['privateKeyPem'], data)
+    csr_for_signing = create_csr(data['privateKeyPem'], data)
     encoded_csr_for_login = base64.urlsafe_b64encode(csr_for_login.encode('utf-8')).decode('utf-8').rstrip('=')
     encoded_csr_for_signing = base64.urlsafe_b64encode(csr_for_signing.encode('utf-8')).decode('utf-8').rstrip('=')
     payload = {
@@ -168,11 +168,11 @@ def step_do_enroll(data):
         response_data = response.json()
 
         login_param = response_data['certificateForLogin']
-        login_certs = extract_certs_from_param(data['privateKey'], login_param)
+        login_certs = extract_certs_from_param(data['privateKeyPem'], login_param)
         data['loginDecryptedCert0'], data['loginDecryptedCert1'] = login_certs[0], login_certs[1]
 
         signing_param = response_data['certificateForSigning']
-        signing_certs = extract_certs_from_param(data['privateKey'], signing_param)
+        signing_certs = extract_certs_from_param(data['privateKeyPem'], signing_param)
         data['signingDecryptedCert0'], data['signingDecryptedCert1'] = signing_certs[0], signing_certs[1]
     else:
         raise RuntimeError(f"Error: {response.status_code}, {response.text}")
@@ -288,7 +288,7 @@ def setup(playbook_file):
 
 
 def unlock(uuid, data):
-    leaf_key_pem = data["privateKey"]
+    leaf_key_pem = data["privateKeyPem"]
     leaf_key = load_pem_private_key(leaf_key_pem.encode("utf-8"), password=None, backend=default_backend())
 
     encoded_intermediate_cert = data['loginDecryptedCert1']
