@@ -21,30 +21,20 @@ import hashlib
 
 
 
-def step_generate_private_keys(data):
+def step_generate_private_key(data):
     # Check if this step should be run
-    if 'privateKeyForLogin' in data:
+    if 'privateKey' in data:
         print("privateKey is already set, skipping step")
         return
 
-    private_key_login = ec.generate_private_key(ec.SECP256R1(), default_backend())
-    pem = private_key_login.private_bytes(
+    private_key = ec.generate_private_key(ec.SECP256R1(), default_backend())
+    pem = private_key.private_bytes(
         encoding=serialization.Encoding.PEM,
         format=serialization.PrivateFormat.TraditionalOpenSSL,
         encryption_algorithm=serialization.NoEncryption()
     )
-    data['privateKeyForLogin'] = pem.decode('utf-8')
-    data['privateKeyForSigning'] = pem.decode('utf-8')
+    data['privateKey'] = pem.decode('utf-8')
 
-    """
-    private_key_signing = ec.generate_private_key(ec.SECP256R1(), default_backend())
-    pem = private_key_signing.private_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PrivateFormat.TraditionalOpenSSL,
-        encryption_algorithm=serialization.NoEncryption()
-    )
-    data['privateKeyForSigning'] = pem.decode('utf-8')
-    """
 
 def step_input_phone_number(data):
     # Check if this step should be run
@@ -126,10 +116,10 @@ def step_extract_enrollment_token_details(data):
 
 
 def step_do_login(data):
-    leaf_key_pem = data["privateKeyForLogin"]
+    leaf_key_pem = data["privateKey"]
     leaf_key = load_pem_private_key(leaf_key_pem.encode("utf-8"), password=None, backend=default_backend())
 
-    # intermediate_key_pem = data["privateKeyForLogin"]
+    # intermediate_key_pem = data["privateKey"]
     # intermediate_key = load_pem_private_key(intermediate_key_pem.encode("utf-8"), password=None, backend=default_backend())
 
     encoded_intermediate_cert = data['loginDecryptedCert1']
@@ -175,8 +165,8 @@ def step_do_enroll(data):
     if 'certificateForLoginParam' in data:
         print("certificateForLogin is already set, skipping do_enroll step.")
         return
-    csr_for_login = create_csr(data['privateKeyForLogin'], data)
-    csr_for_signing = create_csr(data['privateKeyForSigning'], data)
+    csr_for_login = create_csr(data['privateKey'], data)
+    csr_for_signing = create_csr(data['privateKey'], data)
     encoded_csr_for_login = base64.urlsafe_b64encode(csr_for_login.encode('utf-8')).decode('utf-8').rstrip('=')
     encoded_csr_for_signing = base64.urlsafe_b64encode(csr_for_signing.encode('utf-8')).decode('utf-8').rstrip('=')
     payload = {
@@ -223,7 +213,7 @@ def step_extract_certs_from_params(data):
     peer_public_key = load_der_public_key(peer_public_key_encoded, backend=default_backend())
 
     # Load the private key for login (this represents the entity's private key)
-    private_key_pem = data['privateKeyForLogin'].encode('utf-8')
+    private_key_pem = data['privateKey'].encode('utf-8')
     private_key = load_pem_private_key(private_key_pem, password=None, backend=default_backend())
 
     # Step 2: Perform ECDH key exchange to derive the shared secret
@@ -289,7 +279,7 @@ def step_extract_signing_certs_from_params(data):
     peer_public_key = load_der_public_key(peer_public_key_encoded, backend=default_backend())
 
     # Load the private key for login (this represents the entity's private key)
-    private_key_pem = data['privateKeyForSigning'].encode('utf-8')
+    private_key_pem = data['privateKey'].encode('utf-8')
     private_key = load_pem_private_key(private_key_pem, password=None, backend=default_backend())
 
     # Step 2: Perform ECDH key exchange to derive the shared secret
@@ -376,7 +366,7 @@ def setup(playbook_file):
 
     # Define the list of steps to run
     steps = [
-        lambda: step_generate_private_keys(data),
+        lambda: step_generate_private_key(data),
         lambda: step_input_phone_number(data),
         lambda: step_input_recovery_key(data),
         lambda: step_init_recovery(data),
@@ -397,7 +387,7 @@ def setup(playbook_file):
 
 
 def unlock(uuid, data):
-    leaf_key_pem = data["privateKeyForLogin"]
+    leaf_key_pem = data["privateKey"]
     leaf_key = load_pem_private_key(leaf_key_pem.encode("utf-8"), password=None, backend=default_backend())
 
     encoded_intermediate_cert = data['loginDecryptedCert1']
