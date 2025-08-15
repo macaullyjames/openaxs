@@ -26,10 +26,10 @@ class AxsClient:
             data = json.load(file)
             self.enclave = Enclave(
                 private_key_pem=data.get("privateKeyPem"),
-                login_leaf_cert=data.get("loginDecryptedCert0"),
-                login_intermediate_cert=data.get("loginDecryptedCert1"),
-                signing_leaf_cert=data.get("signingDecryptedCert0"),
-                signing_intermediate_cert=data.get("signingDecryptedCert1"),
+                login_leaf_cert=data.get("login_leaf_cert"),
+                login_intermediate_cert=data.get("login_intermediate_cert"),
+                signing_leaf_cert=data.get("signing_leaf_cert"),
+                signing_intermediate_cert=data.get("signing_intermediate_cert"),
             )
             self.auth_token = data.get("authToken")
 
@@ -38,10 +38,10 @@ class AxsClient:
             with open(self.playbook, 'w') as file:
                 data = {
                     "privateKeyPem": self.enclave.private_key_pem,
-                    "loginDecryptedCert0": self.enclave.login_leaf_cert.public_bytes(Encoding.PEM).decode("ascii"),
-                    "loginDecryptedCert1": self.enclave.login_intermediate_cert.public_bytes(Encoding.PEM).decode("ascii"),
-                    "signingDecryptedCert0": self.enclave.signing_leaf_cert.public_bytes(Encoding.PEM).decode("ascii"),
-                    "signingDecryptedCert1": self.enclave.signing_intermediate_cert.public_bytes(Encoding.PEM).decode("ascii"),
+                    "login_leaf_cert": self.enclave.login_leaf_cert.public_bytes(Encoding.PEM).decode("ascii"),
+                    "login_intermediate_cert": self.enclave.login_intermediate_cert.public_bytes(Encoding.PEM).decode("ascii"),
+                    "signing_leaf_cert": self.enclave.signing_leaf_cert.public_bytes(Encoding.PEM).decode("ascii"),
+                    "signing_intermediate_cert": self.enclave.signing_intermediate_cert.public_bytes(Encoding.PEM).decode("ascii"),
                     "authToken": self.auth_token,
                 }
                 json.dump(data, file, indent=4)
