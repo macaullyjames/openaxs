@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import typer
 from axs_client import AxsClient
+from server import run_server
 
 client = AxsClient()
 app = typer.Typer(help="Accessy CLI")
@@ -40,6 +41,16 @@ def list_assets():
         name = item.get("name", "")
         for op in item.get("asset", {}).get("operations", []):
             typer.echo(f"{op['id']}\t{name}")
+
+
+@app.command("serve")
+def serve(
+    operation_id=typer.Argument(..., help="Operation ID to execute"),
+    host: str = "0.0.0.0",
+    port: int = 8000,
+):
+    """Serves a webpage with an unlock button"""
+    run_server(client, operation_id, host=host, port=port)
 
 
 @app.command()
