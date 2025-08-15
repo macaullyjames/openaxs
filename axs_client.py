@@ -5,6 +5,7 @@ import os
 import jwt
 import requests
 import urllib3
+from cryptography.hazmat.primitives._serialization import Encoding
 
 from api_client import APIClient
 from enclave import Enclave
@@ -37,10 +38,10 @@ class AxsClient:
             with open(self.playbook, 'w') as file:
                 data = {
                     "privateKeyPem": self.enclave.private_key_pem,
-                    "loginDecryptedCert0": self.enclave.login_leaf_cert,
-                    "loginDecryptedCert1": self.enclave.login_intermediate_cert,
-                    "signingDecryptedCert0": self.enclave.signing_leaf_cert,
-                    "signingDecryptedCert1": self.enclave.signing_intermediate_cert,
+                    "loginDecryptedCert0": self.enclave.login_leaf_cert.public_bytes(Encoding.PEM).decode("ascii"),
+                    "loginDecryptedCert1": self.enclave.login_intermediate_cert.public_bytes(Encoding.PEM).decode("ascii"),
+                    "signingDecryptedCert0": self.enclave.signing_leaf_cert.public_bytes(Encoding.PEM).decode("ascii"),
+                    "signingDecryptedCert1": self.enclave.signing_intermediate_cert.public_bytes(Encoding.PEM).decode("ascii"),
                     "authToken": self.auth_token,
                 }
                 json.dump(data, file, indent=4)

@@ -1,11 +1,13 @@
 import base64
 import datetime
 import hashlib
+import textwrap
 
 from Crypto.Cipher import AES as AES_Crypto
 from Crypto.Util.Padding import unpad
 
 from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives._serialization import Encoding
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.serialization import load_pem_private_key, load_der_public_key
 from cryptography import x509
@@ -24,17 +26,34 @@ class Enclave:
             )
             private_key_pem = pem.decode('utf-8')
         self.private_key_pem = private_key_pem
+
+        if isinstance(login_leaf_cert, str):
+            login_leaf_cert = x509.load_pem_x509_certificate(login_leaf_cert.encode(), default_backend())
         self.login_leaf_cert = login_leaf_cert
+
+        if isinstance(login_intermediate_cert, str):
+            login_intermediate_cert = x509.load_pem_x509_certificate(login_intermediate_cert.encode(),
+                                                                     default_backend())
         self.login_intermediate_cert = login_intermediate_cert
+
+        if isinstance(signing_leaf_cert, str):
+            signing_leaf_cert = x509.load_pem_x509_certificate(signing_leaf_cert.encode(), default_backend())
         self.signing_leaf_cert = signing_leaf_cert
+
+        if isinstance(signing_intermediate_cert, str):
+            signing_intermediate_cert = x509.load_pem_x509_certificate(signing_intermediate_cert.encode(),
+                                                                       default_backend())
         self.signing_intermediate_cert = signing_intermediate_cert
 
     def encode_proof_message(self):
         private_key_pem = self.private_key_pem
         private_key = load_pem_private_key(private_key_pem.encode("utf-8"), password=None, backend=default_backend())
 
-        encoded_intermediate_cert = self.login_intermediate_cert
-        encoded_leaf_cert = self.login_leaf_cert
+        intermediate_bytes = self.login_intermediate_cert.public_bytes(Encoding.DER)
+        leaf_bytes = self.login_leaf_cert.public_bytes(Encoding.DER)
+        encoded_intermediate_cert = base64.b64encode(intermediate_bytes).decode("ascii")
+        encoded_leaf_cert = base64.b64encode(leaf_bytes).decode("ascii")
+
         base64_certs = base64.urlsafe_b64encode(f"{encoded_leaf_cert}.{encoded_intermediate_cert}".encode("utf-8")).decode(
             "utf-8").rstrip("=")
 
@@ -105,12 +124,18 @@ class Enclave:
                                 iv)  # Use only the first 32 bytes for AES-256
         # Decrypt the ciphertext
         decrypted_padded_message = cipher.decrypt(ciphertext)
-
         decrypted_message = unpad(decrypted_padded_message, AES_Crypto.block_size)
-        # Convert decrypted bytes to a string and store it
         decrypted_message_str = decrypted_message.decode('utf-8')
-        # Print or store the decrypted message
-        certs = decrypted_message_str.split(".")
+
+        # Extract the DER encoded certs
+        der_certs = decrypted_message_str.split(".")
+
+        # Parse the certs
+        certs = []
+        for der in der_certs:
+            der = base64.b64decode(der, validate=True)
+            cert = x509.load_der_x509_certificate(der)
+            certs.append(cert)
         return certs
 
     def create_csr(self, jti, device_id):
