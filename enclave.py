@@ -16,16 +16,16 @@ from cryptography.hazmat.primitives import serialization, hashes
 
 
 class Enclave:
-    def __init__(self, private_key_pem=None, login_leaf_cert=None, login_intermediate_cert=None, signing_leaf_cert=None, signing_intermediate_cert=None):
-        if private_key_pem is None:
+    def __init__(self, private_key=None, login_leaf_cert=None, login_intermediate_cert=None, signing_leaf_cert=None, signing_intermediate_cert=None):
+        if private_key is None:
             private_key = ec.generate_private_key(ec.SECP256R1(), default_backend())
-            pem = private_key.private_bytes(
-                encoding=serialization.Encoding.PEM,
-                format=serialization.PrivateFormat.TraditionalOpenSSL,
-                encryption_algorithm=serialization.NoEncryption()
+        elif isinstance(private_key, str):
+            private_key = serialization.load_pem_private_key(
+                private_key.encode(),
+                password=None,
+                backend=default_backend()
             )
-            private_key_pem = pem.decode('utf-8')
-        self.private_key_pem = private_key_pem
+        self.private_key = private_key
 
         if isinstance(login_leaf_cert, str):
             login_leaf_cert = x509.load_pem_x509_certificate(login_leaf_cert.encode(), default_backend())
@@ -46,9 +46,6 @@ class Enclave:
         self.signing_intermediate_cert = signing_intermediate_cert
 
     def encode_proof_message(self):
-        private_key_pem = self.private_key_pem
-        private_key = load_pem_private_key(private_key_pem.encode("utf-8"), password=None, backend=default_backend())
-
         intermediate_bytes = self.login_intermediate_cert.public_bytes(Encoding.DER)
         leaf_bytes = self.login_leaf_cert.public_bytes(Encoding.DER)
         encoded_intermediate_cert = base64.b64encode(intermediate_bytes).decode("ascii")
@@ -67,7 +64,7 @@ class Enclave:
         body = f"YXhzLjEuNA.{base64_certs}.{base64_timestamp}"  # YXhzLjEuNA == axs.1.4
 
         # Sign the message
-        signature = private_key.sign(
+        signature = self.private_key.sign(
             body.encode("utf-8"),
             ec.ECDSA(hashes.SHA256())
         )
@@ -85,12 +82,8 @@ class Enclave:
         peer_public_key_encoded = base64.urlsafe_b64decode(fix_padding(components[2]))
         peer_public_key = load_der_public_key(peer_public_key_encoded, backend=default_backend())
 
-        # Load the private key for login (this represents the entity's private key)
-        private_key_pem = self.private_key_pem.encode('utf-8')
-        private_key = load_pem_private_key(private_key_pem, password=None, backend=default_backend())
-
         # Step 2: Perform ECDH key exchange to derive the shared secret
-        shared_secret = private_key.exchange(ec.ECDH(), peer_public_key)
+        shared_secret = self.private_key.exchange(ec.ECDH(), peer_public_key)
 
         # Step 3: Hash the shared secret using SHA-512 (as indicated in the Android Java implementation)
         hashed_shared_secret = hashlib.sha512(shared_secret).digest()
@@ -139,13 +132,6 @@ class Enclave:
         return certs
 
     def create_csr(self, jti, device_id):
-        # Load the private key from PEM
-        private_key = serialization.load_pem_private_key(
-            self.private_key_pem.encode('utf-8'),
-            password=None,
-            backend=default_backend()
-        )
-
         # Create subject information
         subject = x509.Name([
             x509.NameAttribute(NameOID.ORGANIZATION_NAME, jti),
@@ -154,7 +140,7 @@ class Enclave:
 
         # Create the CSR
         csr = x509.CertificateSigningRequestBuilder().subject_name(subject).sign(
-            private_key, hashes.SHA256(), default_backend()
+            self.private_key, hashes.SHA256(), default_backend()
         )
 
         csr_der = csr.public_bytes(serialization.Encoding.DER)

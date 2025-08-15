@@ -25,7 +25,7 @@ class AxsClient:
         with open(self.playbook, 'r') as file:
             data = json.load(file)
             self.enclave = Enclave(
-                private_key_pem=data.get("privateKeyPem"),
+                private_key=data.get("private_key"),
                 login_leaf_cert=data.get("login_leaf_cert"),
                 login_intermediate_cert=data.get("login_intermediate_cert"),
                 signing_leaf_cert=data.get("signing_leaf_cert"),
@@ -37,7 +37,7 @@ class AxsClient:
         if self.playbook is not None:
             with open(self.playbook, 'w') as file:
                 data = {
-                    "privateKeyPem": self.enclave.private_key_pem,
+                    "private_key": self.enclave.private_key,
                     "login_leaf_cert": self.enclave.login_leaf_cert.public_bytes(Encoding.PEM).decode("ascii"),
                     "login_intermediate_cert": self.enclave.login_intermediate_cert.public_bytes(Encoding.PEM).decode("ascii"),
                     "signing_leaf_cert": self.enclave.signing_leaf_cert.public_bytes(Encoding.PEM).decode("ascii"),
