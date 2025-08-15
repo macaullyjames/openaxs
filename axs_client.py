@@ -121,10 +121,8 @@ class AxsClient:
         client = APIClient(self.auth_token)
         url = "/asset/my-asset-publication?page_size=100"
         response = client.get(url)
-        if response.status_code == 200:
-            print(json.dumps(response.json(), indent=2))
-        else:
-            print(f"Error: {response.status_code}, {response.text}")
+        response.raise_for_status()
+        return response.json()["items"]
 
     def validate_auth_token(self):
         url = "/auth/action"

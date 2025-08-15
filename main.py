@@ -23,7 +23,11 @@ if __name__ == "__main__":
         client.login()
         client.save()
     elif args.command == "list-assets":
-        client.list_assets()
+        items = client.list_assets()
+        for item in items:
+            asset = item["asset"]
+            operation = asset["operations"][0]
+            print(f"{operation["id"]} {item["name"]}")
     elif args.command == "validate-auth-token":
         client.validate_auth_token()
     elif args.command == "unlock":
