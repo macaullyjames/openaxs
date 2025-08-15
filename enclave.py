@@ -14,7 +14,7 @@ from cryptography.hazmat.primitives import serialization, hashes
 
 
 class Enclave:
-    def __init__(self, private_key_pem=None, login_leaf_cert=None, login_intermediate_cert=None):
+    def __init__(self, private_key_pem=None, login_leaf_cert=None, login_intermediate_cert=None, signing_leaf_cert=None, signing_intermediate_cert=None):
         if private_key_pem is None:
             private_key = ec.generate_private_key(ec.SECP256R1(), default_backend())
             pem = private_key.private_bytes(
@@ -26,6 +26,8 @@ class Enclave:
         self.private_key_pem = private_key_pem
         self.login_leaf_cert = login_leaf_cert
         self.login_intermediate_cert = login_intermediate_cert
+        self.signing_leaf_cert = signing_leaf_cert
+        self.signing_intermediate_cert = signing_intermediate_cert
 
     def encode_proof_message(self):
         private_key_pem = self.private_key_pem
