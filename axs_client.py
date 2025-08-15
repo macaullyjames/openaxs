@@ -31,7 +31,7 @@ class AxsClient:
                 signing_leaf_cert=data.get("signing_leaf_cert"),
                 signing_intermediate_cert=data.get("signing_intermediate_cert"),
             )
-            self.auth_token = data.get("authToken")
+            self.auth_token = data.get("auth_token")
 
     def save(self):
         if self.playbook is not None:
@@ -42,7 +42,7 @@ class AxsClient:
                     "login_intermediate_cert": self.enclave.login_intermediate_cert.public_bytes(Encoding.PEM).decode("ascii"),
                     "signing_leaf_cert": self.enclave.signing_leaf_cert.public_bytes(Encoding.PEM).decode("ascii"),
                     "signing_intermediate_cert": self.enclave.signing_intermediate_cert.public_bytes(Encoding.PEM).decode("ascii"),
-                    "authToken": self.auth_token,
+                    "auth_token": self.auth_token,
                 }
                 json.dump(data, file, indent=4)
 
